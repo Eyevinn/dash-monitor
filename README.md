@@ -1,0 +1,420 @@
+# DASH Stream Monitor
+
+A TypeScript/Node.js service to monitor DASH/MPEG-DASH live streams for errors and inconsistencies. Provides REST API and Prometheus metrics for integration with monitoring dashboards.
+
+## Features
+
+- 🎯 **DASH/MPEG-DASH Monitoring** - Monitor one or more DASH streams continuously
+- 📊 **Prometheus Metrics** - OpenMetrics endpoint for Grafana dashboards
+- 🔍 **Error Detection** - Validates MPD structure, periods, timing, and staleness
+- 🚀 **REST API** - Full API for programmatic control
+- 🐳 **Docker Ready** - Includes Dockerfile and docker-compose setup
+- 📦 **Library & CLI** - Use as a library or standalone service
+
+## Validation Checks
+
+The monitor validates:
+
+- **Manifest Availability** - HTTP fetch success
+- **XML Parsing** - Valid MPD structure
+- **MPD Structure** - Required attributes and proper schema
+- **Period Continuity** - No gaps or overlaps in periods
+- **Publish Time** - Progressive updates for live streams
+- **Staleness Detection** - Configurable threshold for manifest updates
+- **Segment Timeline** - Consistency and availability
+
+## Installation
+
+```bash
+npm install @eyevinn/dash-monitor
+```
+
+Or clone and build:
+
+```bash
+git clone https://github.com/Eyevinn/dash-monitor.git
+cd dash-monitor
+npm install
+npm run build
+```
+
+## Quick Start
+
+### As a Service
+
+```bash
+# Start the service
+npm start
+
+# Or with custom port
+npm start -- -p 3000
+
+# Using Docker
+docker-compose up
+```
+
+### As a Library
+
+```javascript
+const { DASHMonitor } = require('@eyevinn/dash-monitor');
+
+const monitor = new DASHMonitor([
+  'https://example.com/stream.mpd'
+], {
+  staleLimit: 6000,      // 6 seconds
+  monitorInterval: 3000  // Check every 3 seconds
+});
+
+// Start monitoring
+await monitor.start();
+
+// Get errors
+const errors = monitor.getErrors();
+console.log(errors);
+
+// Stop monitoring
+monitor.stop();
+```
+
+## API Reference
+
+### REST API Endpoints
+
+#### Create Monitor
+```http
+POST /monitor
+Content-Type: application/json
+
+{
+  "urls": [
+    "https://example.com/stream.mpd",
+    { "url": "https://example.com/stream2.mpd", "id": "custom-id" }
+  ],
+  "options": {
+    "staleLimit": 6000,
+    "monitorInterval": 3000,
+    "errorLimit": 10
+  }
+}
+
+Response: { "monitorId": "uuid", "streamCount": 2 }
+```
+
+#### List Monitors
+```http
+GET /monitor
+
+Response: {
+  "monitors": [
+    {
+      "monitorId": "uuid",
+      "state": "active",
+      "createdAt": 1234567890,
+      "streamCount": 2
+    }
+  ]
+}
+```
+
+#### Get Monitor Status
+```http
+GET /monitor/:monitorId/status
+
+Response: {
+  "monitorId": "uuid",
+  "state": "active",
+  "lastChecked": 1234567890,
+  "streamCount": 2,
+  "errorCount": 5,
+  "errors": [...],
+  "manifestFetchErrors": {...}
+}
+```
+
+#### Add Streams
+```http
+PUT /monitor/:monitorId/streams
+Content-Type: application/json
+
+{
+  "urls": ["https://example.com/new-stream.mpd"]
+}
+
+Response: { "monitorId": "uuid", "streamCount": 3 }
+```
+
+#### Remove Stream
+```http
+DELETE /monitor/:monitorId/stream
+Content-Type: application/json
+
+{
+  "streamId": "stream-id"
+}
+
+Response: { "monitorId": "uuid", "removed": true, "streamCount": 2 }
+```
+
+#### Clear Errors
+```http
+DELETE /monitor/:monitorId/status
+
+Response: { "monitorId": "uuid", "cleared": true }
+```
+
+#### Delete Monitor
+```http
+DELETE /monitor/:monitorId
+
+Response: { "deleted": true }
+```
+
+### Prometheus Metrics
+
+Access metrics at `/metrics`:
+
+```
+# Monitor info
+dash_monitor_info{monitor_id, stream_count, created_at}
+
+# Monitor state
+dash_monitor_state{monitor_id, state}
+
+# Total errors per stream
+dash_monitor_stream_total_errors{monitor_id, stream_id}
+
+# Time since last error
+dash_monitor_stream_time_since_last_error_seconds{monitor_id, stream_id}
+
+# Manifest fetch errors
+dash_monitor_manifest_fetch_errors{monitor_id, url, status_code}
+
+# Current error count
+dash_monitor_error_count{monitor_id}
+```
+
+## Configuration
+
+### Monitor Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `staleLimit` | number | 6000 | Milliseconds before manifest considered stale |
+| `monitorInterval` | number | 3000 | Milliseconds between checks |
+| `errorLimit` | number | 10 | Maximum errors to store (FIFO) |
+| `logConsole` | boolean | true | Enable console logging |
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Service port | 8080 |
+| `NODE_ENV` | Environment | development |
+
+## Docker Deployment
+
+### Build and Run
+
+```bash
+# Build image
+docker build -t dash-monitor .
+
+# Run container
+docker run -p 8080:8080 dash-monitor
+```
+
+### Docker Compose (with Prometheus & Grafana)
+
+```bash
+docker-compose up -d
+```
+
+Access:
+- DASH Monitor: http://localhost:8080
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin/admin)
+
+## OSC Deployment
+
+Deploy to Eyevinn Open Source Cloud:
+
+1. **Push to GitHub**
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/your-org/dash-monitor.git
+git push -u origin main
+```
+
+2. **Deploy with Web Runner**
+```bash
+osc create eyevinn-web-runner dash-monitor \
+  -o GitHubUrl=https://github.com/your-org/dash-monitor \
+  -o GitHubToken="{{secrets.ghtoken}}" \
+  -o OscAccessToken="{{secrets.osctoken}}"
+```
+
+3. **Create Monitor Manager** (Optional)
+
+Similar to the HLS monitor setup, you can create a manager service that reads from CouchDB and automatically adds/removes streams.
+
+## Error Types
+
+| Error Type | Description |
+|------------|-------------|
+| `MANIFEST_FETCH_ERROR` | Failed to fetch MPD manifest |
+| `XML_PARSE_ERROR` | Invalid XML structure |
+| `MPD_STRUCTURE_ERROR` | Missing required MPD attributes |
+| `PERIOD_CONTINUITY_ERROR` | Period timing issues |
+| `STALE_MANIFEST` | Manifest hasn't updated within threshold |
+| `PUBLISH_TIME_ERROR` | Publish time went backwards |
+| `SEGMENT_TIMELINE_ERROR` | Segment timeline inconsistencies |
+| `SEGMENT_AVAILABILITY_ERROR` | Segments not available |
+
+## Programmatic Usage
+
+### Monitor Single Stream
+
+```javascript
+const { DASHMonitor } = require('@eyevinn/dash-monitor');
+
+const monitor = new DASHMonitor(['https://example.com/stream.mpd']);
+await monitor.start();
+```
+
+### Monitor Multiple Streams
+
+```javascript
+const monitor = new DASHMonitor([
+  { url: 'https://example.com/stream1.mpd', id: 'stream-1' },
+  { url: 'https://example.com/stream2.mpd', id: 'stream-2' }
+]);
+
+await monitor.start();
+```
+
+### Add/Remove Streams Dynamically
+
+```javascript
+// Add streams
+await monitor.update([
+  'https://example.com/stream3.mpd'
+]);
+
+// Remove stream
+await monitor.removeStream('stream-1');
+```
+
+### Access Errors
+
+```javascript
+// Get all errors
+const errors = monitor.getErrors();
+
+// Get fetch errors
+const fetchErrors = monitor.getManifestFetchErrors();
+
+// Get error counts per stream
+const totalErrors = monitor.getTotalErrorsPerStream();
+
+// Clear errors
+monitor.clearErrors();
+```
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Run tests
+npm test
+
+# Start development server
+npm run dev
+```
+
+## Testing with Real Streams
+
+Test with public DASH streams:
+
+```bash
+curl -X POST http://localhost:8080/monitor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urls": [
+      "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd"
+    ]
+  }'
+```
+
+Check metrics:
+```bash
+curl http://localhost:8080/metrics
+```
+
+## Architecture
+
+```
+┌─────────────────┐
+│  DASHMonitor    │  Core monitoring engine
+│  - Validates    │
+│  - Tracks errors│
+│  - Manages state│
+└────────┬────────┘
+         │
+         ├─ MPDLoader (fetch & parse)
+         ├─ ErrorsList (FIFO storage)
+         └─ Validation Logic
+              ├─ Structure
+              ├─ Periods
+              ├─ Timing
+              └─ Staleness
+
+┌─────────────────────┐
+│ DASHMonitorService  │  REST API & Metrics
+│  - Fastify server   │
+│  - API endpoints    │
+│  - Prometheus export│
+└─────────────────────┘
+```
+
+## Comparison with HLS Monitor
+
+| Feature | HLS Monitor | DASH Monitor |
+|---------|-------------|--------------|
+| Manifest Format | M3U8 (text) | MPD (XML) |
+| Parser Library | @eyevinn/m3u8 | mpd-parser |
+| Key Validations | Media sequences, discontinuities | Periods, publish time, XML structure |
+| API Pattern | ✅ Same | ✅ Same |
+| Metrics | ✅ Prometheus | ✅ Prometheus |
+| Docker | ✅ Yes | ✅ Yes |
+
+## Contributing
+
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## License
+
+MIT
+
+## Credits
+
+Built by Eyevinn Technology - https://www.eyevinn.se
+
+Inspired by the [HLS Stream Monitor](https://github.com/Eyevinn/hls-monitor)
+
+## Support
+
+- GitHub Issues: https://github.com/Eyevinn/dash-monitor/issues
+- Eyevinn OSC: https://osaas.io

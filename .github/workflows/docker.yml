@@ -1,0 +1,23 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build Docker image
+      run: docker build -t dash-monitor .
+
+    - name: Test Docker image
+      run: |
+        docker run -d -p 8080:8080 --name test-monitor dash-monitor
+        sleep 5
+        curl -f http://localhost:8080/ || exit 1
+        docker stop test-monitor

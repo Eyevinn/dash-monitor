@@ -1,0 +1,9 @@
+{
+  "urls": [
+    "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+    {
+      "url": "https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd",
+      "id": "custom-stream-id"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "urls": [
+    {
+      "url": "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+      "id": "bbb-30fps"
+    },
+    {
+      "url": "https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd",
+      "id": "envivio"
+    },
+    {
+      "url": "https://dash.akamaized.net/dash264/TestCases/1a/sony/SNE_DASH_SD_CASE1A_REVISED.mpd",
+      "id": "sony-test"
+    }
+  ],
+  "options": {
+    "staleLimit": 10000,
+    "monitorInterval": 5000
+  }
+}

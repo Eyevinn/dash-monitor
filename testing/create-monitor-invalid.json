@@ -1,0 +1,15 @@
+{
+  "urls": [
+    {
+      "url": "https://example.com/nonexistent.mpd",
+      "id": "invalid-stream"
+    },
+    {
+      "url": "https://httpstat.us/404",
+      "id": "404-error"
+    }
+  ],
+  "options": {
+    "monitorInterval": 3000
+  }
+}
