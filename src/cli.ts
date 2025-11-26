@@ -2,7 +2,7 @@
 /**
  * CLI for DASH Monitor Service
  */
-import { DASHMonitorService } from './dashMonitorService';
+import { DASHMonitorService } from './DashMonitorService';
 import Getopt from 'node-getopt';
 
 const getopt = new Getopt([
