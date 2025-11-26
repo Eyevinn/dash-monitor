@@ -5,7 +5,7 @@
 import { Mutex } from 'async-mutex';
 import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
-import { MPDLoader } from './MpdLoader';
+import { MPDLoader } from './MPDLoader';
 import { ErrorsList } from './ErrorsList';
 import { ErrorMessages } from './errorMessages';
 import {

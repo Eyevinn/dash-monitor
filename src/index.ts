@@ -1,9 +1,9 @@
 /**
  * Main exports for DASH Monitor library
  */
-export { DASHMonitor } from './DashMonitor';
-export { DASHMonitorService } from './DashMonitorService';
-export { MPDLoader } from './MpdLoader';
+export { DASHMonitor } from './DASHMonitor';
+export { DASHMonitorService } from './DASHMonitorService';
+export { MPDLoader } from './MPDLoader';
 export { ErrorsList } from './ErrorsList';
 export { ErrorMessages, formatDuration, formatBytes, formatBitrate } from './errorMessages';
 export {

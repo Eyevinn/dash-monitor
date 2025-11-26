@@ -3,7 +3,7 @@
  * REST API service for managing DASH stream monitors
  */
 import fastify, { FastifyInstance } from 'fastify';
-import { DASHMonitor } from './DashMonitor';
+import { DASHMonitor } from './DASHMonitor';
 import { StreamInput, MonitorOptions, State } from './types';
 
 interface CreateMonitorBody {
