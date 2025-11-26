@@ -13,15 +13,17 @@ A TypeScript/Node.js service to monitor DASH/MPEG-DASH live streams for errors a
 
 ## Validation Checks
 
-The monitor validates:
+The monitor performs comprehensive validation:
 
-- **Manifest Availability** - HTTP fetch success
-- **XML Parsing** - Valid MPD structure
-- **MPD Structure** - Required attributes and proper schema
-- **Period Continuity** - No gaps or overlaps in periods
-- **Publish Time** - Progressive updates for live streams
-- **Staleness Detection** - Configurable threshold for manifest updates
-- **Segment Timeline** - Consistency and availability
+- ✅ **Manifest Availability** - HTTP fetch success with proper error codes
+- ✅ **XML Parsing** - Valid MPD XML structure
+- ✅ **MPD Structure** - Required attributes and proper schema
+- ✅ **Period Continuity** - No gaps or overlaps in periods
+- ✅ **Publish Time** - Progressive updates for live streams
+- ✅ **Staleness Detection** - Configurable threshold for manifest updates
+- ✅ **Segment Timeline** - Timeline gaps, overlaps, and duration validation
+- ✅ **Codec & Bitrate** - Validates codec formats and bitrate ranges
+- ✅ **Resolution & Aspect Ratio** - Quality metadata validation
 
 ## Installation
 
@@ -394,27 +396,34 @@ curl http://localhost:8080/metrics
 | Metrics | ✅ Prometheus | ✅ Prometheus |
 | Docker | ✅ Yes | ✅ Yes |
 
-## Contributing
+## [Contributing](CONTRIBUTING.md)
 
-Contributions welcome! Please:
+In addition to contributing code, you can help to triage issues. This can include reproducing bug reports or asking for vital information such as version numbers or reproduction instructions.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+## License (MIT)
 
-## License
+Copyright 2024 Eyevinn Technology
 
-MIT
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-## Credits
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-Built by Eyevinn Technology - https://www.eyevinn.se
-
-Inspired by the [HLS Stream Monitor](https://github.com/Eyevinn/hls-monitor)
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Support
 
-- GitHub Issues: https://github.com/Eyevinn/dash-monitor/issues
-- Eyevinn OSC: https://osaas.io
+Join our [community on Slack](http://slack.streamingtech.se) where you can post any questions regarding any of our open-source projects. Eyevinn's consulting business can also offer you:
+
+- Further development of this component
+- Customization and integration of this component into your platform
+- Support and maintenance agreement
+
+Contact [sales@eyevinn.se](mailto:sales@eyevinn.se) if you are interested.
+
+## About Eyevinn Technology
+
+Eyevinn Technology is an independent consultant firm specializing in video and streaming. Independent in a way that we are not commercially tied to any platform or technology vendor.
+
+At Eyevinn, every software developer consultant has a dedicated budget reserved for open source development and contribution to the open source community. This gives us room for innovation, team building, and personal competence development. And also gives us as a company a way to contribute back to the open source community.
+
+Want to know more about Eyevinn and how it is to work here. Contact us at work@eyevinn.se!

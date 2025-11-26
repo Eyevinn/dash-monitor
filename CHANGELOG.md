@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-11-26
+
+### Fixed
+- **Critical**: Fixed segment timeline validation to use relative timestamps instead of absolute values
+- Resolved false positive timeline errors by calculating presentation time relative to first segment
+- Improved timeline gap/overlap detection accuracy for live and VOD streams
+- Timeline validation now properly handles period transitions and timestamp resets
+
+### Technical Details
+- Modified `validateSegmentTimeline()` in `DASHMonitor.ts` to establish baseline time from first segment
+- Added `baseTime` variable to track initial presentation timestamp
+- Changed timeline calculations from absolute to relative time comparisons
+- Fixed edge case where absolute timestamps were incorrectly compared to cumulative durations
+
+### Testing
+- Verified with multiple DASH-IF reference streams
+- Tested live streams with period transitions (periods_60 test case)
+- Confirmed no false timeline errors on working streams
+- Timeline overlaps still correctly detected during legitimate period transitions
+
 ## [1.0.0] - 2025-11-19
 
 ### Added

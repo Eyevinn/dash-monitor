@@ -4,7 +4,8 @@
  */
 import fetch from 'node-fetch';
 import { parse } from 'mpd-parser';
-import { ParsedMPD } from './types';
+import { ParsedMPD, MPDParserOutput, MPDParseError, MPDFetchError } from './types';
+import { ErrorMessages } from './errorMessages';
 
 export class MPDLoader {
   /**
@@ -12,21 +13,37 @@ export class MPDLoader {
    * @param uri The MPD manifest URL
    * @param previousManifest Optional previous manifest for live stream updates
    * @returns Parsed MPD object
+   * @throws {MPDFetchError} When HTTP fetch fails
+   * @throws {MPDParseError} When XML parsing fails
    */
-  async load(uri: string, previousManifest?: any): Promise<ParsedMPD> {
+  async load(uri: string, previousManifest?: ParsedMPD): Promise<ParsedMPD> {
     try {
       const response = await fetch(uri);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new MPDFetchError(
+          ErrorMessages.FETCH_HTTP_ERROR(response.status, response.statusText),
+          response.status
+        );
       }
 
       const manifestText = await response.text();
 
+      // Parse using mpd-parser
       return this.parse(manifestText, uri, previousManifest);
     } catch (error) {
+      // Re-throw MPDParseError and MPDFetchError as-is
+      if (error instanceof MPDParseError || error instanceof MPDFetchError) {
+        throw error;
+      }
+
+      // Wrap other fetch errors (network errors, timeouts, etc.)
       if (error instanceof Error) {
-        throw new Error(`Failed to load MPD from ${uri}: ${error.message}`);
+        throw new MPDFetchError(
+          ErrorMessages.FETCH_NETWORK_ERROR(uri, error.message),
+          undefined,
+          error
+        );
       }
       throw error;
     }
@@ -38,18 +55,30 @@ export class MPDLoader {
    * @param manifestUri The manifest URI for resolving relative URLs
    * @param previousManifest Optional previous manifest for live stream updates
    * @returns Parsed MPD object
+   * @throws {MPDParseError} When XML parsing fails
    */
-  parse(manifestText: string, manifestUri: string, previousManifest?: any): ParsedMPD {
+  parse(manifestText: string, manifestUri: string, previousManifest?: ParsedMPD): ParsedMPD {
     try {
+      // Basic XML validation before parsing
+      if (!MPDLoader.isValidXML(manifestText)) {
+        throw new MPDParseError(ErrorMessages.PARSE_INVALID_XML());
+      }
+
       const parsed = parse(manifestText, {
         manifestUri,
-        previousManifest
-      });
+        previousManifest,
+      }) as MPDParserOutput;
 
       return this.extractMPDMetadata(parsed);
     } catch (error) {
+      // Re-throw MPDParseError as-is
+      if (error instanceof MPDParseError) {
+        throw error;
+      }
+
+      // Wrap parsing errors as MPDParseError
       if (error instanceof Error) {
-        throw new Error(`Failed to parse MPD: ${error.message}`);
+        throw new MPDParseError(ErrorMessages.PARSE_FAILED(error.message), error);
       }
       throw error;
     }
@@ -57,21 +86,63 @@ export class MPDLoader {
 
   /**
    * Extract key MPD metadata from parsed manifest
+   * The mpd-parser library converts MPD to an HLS-like structure,
+   * so we need to adapt the output to our expected format
    */
-  private extractMPDMetadata(parsed: any): ParsedMPD {
+  private extractMPDMetadata(parsed: MPDParserOutput): ParsedMPD {
+    // Infer type from playlist endList
+    // Note: Check playlist.endList (not root endList) - truthy means VOD, falsy means Live
+    let streamType = 'dynamic'; // Default to live
+    if (parsed.playlists && parsed.playlists.length > 0) {
+      const firstPlaylist = parsed.playlists[0];
+      streamType = firstPlaylist.endList ? 'static' : 'dynamic';
+    }
+
+    // The parser returns an HLS-like structure
     const mpd: ParsedMPD = {
-      type: parsed.type,
-      mediaPresentationDuration: parsed.mediaPresentationDuration,
-      minimumUpdatePeriod: parsed.minimumUpdatePeriod,
-      publishTime: parsed.publishTime,
-      availabilityStartTime: parsed.availabilityStartTime,
-      timeShiftBufferDepth: parsed.timeShiftBufferDepth,
-      suggestedPresentationDelay: parsed.suggestedPresentationDelay,
-      periods: parsed.periods || []
+      // Direct properties from parser
+      allowCache: parsed.allowCache,
+      endList: parsed.endList,
+      mediaSequence: parsed.mediaSequence,
+      discontinuitySequence: parsed.discontinuitySequence,
+      playlistType: parsed.playlistType,
+      targetDuration: parsed.targetDuration,
+      totalDuration: parsed.totalDuration,
+      duration: parsed.duration,
+      playlists: parsed.playlists || [],
+      mediaGroups: parsed.mediaGroups,
+      segments: parsed.segments,
+      discontinuityStarts: parsed.discontinuityStarts,
+      dateTimeString: parsed.dateTimeString,
+      dateTimeObject: parsed.dateTimeObject,
+      contentSteering: parsed.contentSteering,
+
+      // Map to legacy MPD properties for compatibility with existing validation logic
+      // Type inferred from playlist.endList: truthy = static (VOD), falsy = dynamic (live)
+      type: streamType,
+
+      // Duration mapping (only set if available and not zero)
+      mediaPresentationDuration:
+        parsed.duration && parsed.duration > 0
+          ? parsed.duration
+          : parsed.totalDuration && parsed.totalDuration > 0
+            ? parsed.totalDuration
+            : undefined,
+
+      // Map playlists to periods (playlists represent different quality/bitrate variants)
+      periods:
+        parsed.playlists && parsed.playlists.length > 0
+          ? [
+              {
+                id: '0',
+                playlists: parsed.playlists,
+              },
+            ]
+          : [],
     };
 
-    // Include additional properties
-    Object.keys(parsed).forEach(key => {
+    // Include any additional properties
+    Object.keys(parsed).forEach((key) => {
       if (!(key in mpd)) {
         mpd[key] = parsed[key];
       }

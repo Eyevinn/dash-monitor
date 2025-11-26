@@ -75,11 +75,16 @@ dash-monitor/
 - ✅ **Error Tracking**: FIFO queue with timestamps
 
 ### DASH-Specific Validations
-- ✅ **MPD Structure**: Required attributes, XML validity
+- ✅ **Manifest Availability**: HTTP fetch with proper error codes and retry logic
+- ✅ **XML Parsing**: Valid MPD XML structure with custom error classes
+- ✅ **MPD Structure**: Required attributes, XML validity, type detection
 - ✅ **Period Continuity**: No gaps/overlaps in periods
 - ✅ **Publish Time**: Progressive updates for live streams
-- ✅ **HTTP Errors**: Fetch failures with status codes
-- ✅ **Type Validation**: Static vs Dynamic MPD detection
+- ✅ **Staleness Detection**: Configurable threshold for manifest updates
+- ✅ **Segment Timeline**: Timeline gaps, overlaps, and duration validation (NEW)
+- ✅ **Codec & Bitrate**: Validates codec formats and bitrate ranges (NEW)
+- ✅ **Resolution & Aspect Ratio**: Quality metadata validation (NEW)
+- ✅ **Segment Availability**: Optional HTTP HEAD checks for segment availability (NEW)
 
 ### REST API (10 Endpoints)
 
@@ -405,14 +410,37 @@ npm start
 
 ---
 
+## 📦 Recent Enhancements (v1.1.0)
+
+### Code Quality Improvements
+- ✅ **TypeScript Type Safety**: Eliminated `any` types in core modules
+- ✅ **Custom Error Classes**: `MPDParseError` and `MPDFetchError` with proper stack traces
+- ✅ **Standardized Error Messages**: 34 centralized error message templates
+- ✅ **ESLint Integration**: TypeScript-ESLint with strict rules
+- ✅ **Prettier Formatting**: Consistent code style across codebase
+- ✅ **Enhanced Testing**: 21 total tests covering validation and error handling
+
+### Enhanced Validation
+- ✅ **Segment Timeline Validation**: Detects gaps, overlaps, and duration issues
+- ✅ **Codec Validation**: Validates codec formats (avc1-3, hevc, vp8/9, av01, mp4a, opus, vorbis)
+- ✅ **Bitrate Validation**: Range checking (1 Kbps - 100 Mbps)
+- ✅ **Resolution Validation**: Validates dimensions (16x16 to 8192x8192) and aspect ratios
+- ✅ **Segment Availability**: Optional HTTP HEAD checks for segment accessibility
+
+### Documentation & Organization
+- ✅ **Consolidated Documentation**: Organized into logical structure
+- ✅ **Architecture Documentation**: Comprehensive system overview
+- ✅ **Development Guide**: ESLint, Prettier, and testing workflows
+- ✅ **Consistent Naming**: Standardized test file naming (kebab-case)
+
 ## 🔮 Future Roadmap
 
-### v1.1.0 - Enhancements
-- [ ] Actual segment URL validation
+### v1.2.0 - Additional Features
 - [ ] Grafana dashboard templates
 - [ ] Webhook notifications
-- [ ] Advanced SegmentTimeline validation
 - [ ] Rate limiting options
+- [ ] Retry logic with exponential backoff
+- [ ] Circuit breaker pattern
 
 ### v1.2.0 - Features
 - [ ] Support for SegmentBase addressing

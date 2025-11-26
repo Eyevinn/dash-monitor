@@ -1,6 +1,6 @@
 {
   "name": "@eyevinn/dash-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Service to monitor one or more DASH/MPEG-DASH stream(s) for errors and inconsistencies",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,12 @@
     "build": "tsc",
     "start": "ts-node src/cli.ts",
     "dev": "ts-node src/cli.ts",
-    "test": "npm run build && node test/basic.test.js",
+    "test": "npm run build && node test/basic-monitor.test.js",
+    "test:all": "npm run build && node test/basic-monitor.test.js && node test/error-handling.test.js && node test/validation.test.js",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
     "postversion": "git push && git push --tags"
   },
   "keywords": [
@@ -47,9 +52,14 @@
     "@types/node-fetch": "^2.6.13",
     "@types/node-getopt": "^0.2.35",
     "@types/uuid": "^9.0.8",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.2",
     "jasmine": "^5.1.0",
     "jasmine-ts": "^0.4.0",
-    "nock": "^13.5.4"
+    "nock": "^13.5.4",
+    "prettier": "^3.6.2"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -2,8 +2,8 @@
  * DASH Monitor Service
  * REST API service for managing DASH stream monitors
  */
-import fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { DASHMonitor } from './DASHMonitor';
+import fastify, { FastifyInstance } from 'fastify';
+import { DASHMonitor } from './dashMonitor';
 import { StreamInput, MonitorOptions, State } from './types';
 
 interface CreateMonitorBody {
@@ -35,54 +35,51 @@ export class DASHMonitorService {
    */
   private setupRoutes(): void {
     // Health check
-    this.server.get('/', async (request, reply) => {
+    this.server.get('/', async () => {
       return { status: 'ok', service: 'dash-monitor', monitors: this.monitors.size };
     });
 
     // Create monitor
-    this.server.post<{ Body: CreateMonitorBody }>(
-      '/monitor',
-      async (request, reply) => {
-        try {
-          const { urls, options } = request.body;
+    this.server.post<{ Body: CreateMonitorBody }>('/monitor', async (request, reply) => {
+      try {
+        const { urls, options } = request.body;
 
-          if (!urls || !Array.isArray(urls) || urls.length === 0) {
-            return reply.code(400).send({ error: 'Invalid urls parameter' });
-          }
-
-          // Validate URLs
-          for (const url of urls) {
-            const urlString = typeof url === 'string' ? url : url.url;
-            if (!this.isValidUrl(urlString)) {
-              return reply.code(400).send({ error: `Invalid URL: ${urlString}` });
-            }
-          }
-
-          // Create monitor
-          const monitor = new DASHMonitor(urls, options);
-          this.monitors.set(monitor.getMonitorId(), monitor);
-
-          // Start monitoring
-          monitor.start();
-
-          return {
-            monitorId: monitor.getMonitorId(),
-            streamCount: monitor.getStreams().length
-          };
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          return reply.code(500).send({ error: errorMessage });
+        if (!urls || !Array.isArray(urls) || urls.length === 0) {
+          return reply.code(400).send({ error: 'Invalid urls parameter' });
         }
+
+        // Validate URLs
+        for (const url of urls) {
+          const urlString = typeof url === 'string' ? url : url.url;
+          if (!this.isValidUrl(urlString)) {
+            return reply.code(400).send({ error: `Invalid URL: ${urlString}` });
+          }
+        }
+
+        // Create monitor
+        const monitor = new DASHMonitor(urls, options);
+        this.monitors.set(monitor.getMonitorId(), monitor);
+
+        // Start monitoring
+        void monitor.start();
+
+        return {
+          monitorId: monitor.getMonitorId(),
+          streamCount: monitor.getStreams().length,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return reply.code(500).send({ error: errorMessage });
       }
-    );
+    });
 
     // List monitors
-    this.server.get('/monitor', async (request, reply) => {
-      const monitors = Array.from(this.monitors.values()).map(monitor => ({
+    this.server.get('/monitor', async () => {
+      const monitors = Array.from(this.monitors.values()).map((monitor) => ({
         monitorId: monitor.getMonitorId(),
         state: monitor.getState(),
         createdAt: monitor.getCreatedAt(),
-        streamCount: monitor.getStreams().length
+        streamCount: monitor.getStreams().length,
       }));
 
       return { monitors };
@@ -109,7 +106,7 @@ export class DASHMonitorService {
           streamCount: monitor.getStreams().length,
           errorCount: errors.length,
           errors,
-          manifestFetchErrors
+          manifestFetchErrors,
         };
       }
     );
@@ -127,13 +124,13 @@ export class DASHMonitorService {
 
         return {
           monitorId,
-          streams: monitor.getStreams()
+          streams: monitor.getStreams(),
         };
       }
     );
 
     // Add streams to monitor
-    this.server.put<{ Params: { monitorId: string }, Body: UpdateStreamsBody }>(
+    this.server.put<{ Params: { monitorId: string }; Body: UpdateStreamsBody }>(
       '/monitor/:monitorId/streams',
       async (request, reply) => {
         const { monitorId } = request.params;
@@ -160,13 +157,13 @@ export class DASHMonitorService {
 
         return {
           monitorId,
-          streamCount: monitor.getStreams().length
+          streamCount: monitor.getStreams().length,
         };
       }
     );
 
     // Remove stream from monitor
-    this.server.delete<{ Params: { monitorId: string }, Body: RemoveStreamBody }>(
+    this.server.delete<{ Params: { monitorId: string }; Body: RemoveStreamBody }>(
       '/monitor/:monitorId/stream',
       async (request, reply) => {
         const { monitorId } = request.params;
@@ -190,7 +187,7 @@ export class DASHMonitorService {
         return {
           monitorId,
           removed: true,
-          streamCount: monitor.getStreams().length
+          streamCount: monitor.getStreams().length,
         };
       }
     );
@@ -210,7 +207,7 @@ export class DASHMonitorService {
 
         return {
           monitorId,
-          cleared: true
+          cleared: true,
         };
       }
     );
@@ -230,23 +227,23 @@ export class DASHMonitorService {
         this.monitors.delete(monitorId);
 
         return {
-          deleted: true
+          deleted: true,
         };
       }
     );
 
     // Delete all monitors
-    this.server.delete('/monitor', async (request, reply) => {
-      this.monitors.forEach(monitor => monitor.stop());
+    this.server.delete('/monitor', async () => {
+      this.monitors.forEach((monitor) => monitor.stop());
       this.monitors.clear();
 
       return {
-        deleted: true
+        deleted: true,
       };
     });
 
     // Prometheus metrics endpoint
-    this.server.get('/metrics', async (request, reply) => {
+    this.server.get('/metrics', async (_request, reply) => {
       const metrics = this.generateMetrics();
 
       reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
@@ -269,7 +266,7 @@ export class DASHMonitorService {
     lines.push('# HELP dash_monitor_info Information about DASH monitors');
     lines.push('# TYPE dash_monitor_info gauge');
 
-    this.monitors.forEach(monitor => {
+    this.monitors.forEach((monitor) => {
       const monitorId = escapeLabel(monitor.getMonitorId());
       const streamCount = monitor.getStreams().length;
       const createdAt = monitor.getCreatedAt();
@@ -283,7 +280,7 @@ export class DASHMonitorService {
     lines.push('# HELP dash_monitor_state State of monitor (1=active, 0=inactive)');
     lines.push('# TYPE dash_monitor_state gauge');
 
-    this.monitors.forEach(monitor => {
+    this.monitors.forEach((monitor) => {
       const monitorId = escapeLabel(monitor.getMonitorId());
       const state = monitor.getState();
 
@@ -302,7 +299,7 @@ export class DASHMonitorService {
     lines.push('# HELP dash_monitor_stream_total_errors Total errors per stream');
     lines.push('# TYPE dash_monitor_stream_total_errors counter');
 
-    this.monitors.forEach(monitor => {
+    this.monitors.forEach((monitor) => {
       const monitorId = escapeLabel(monitor.getMonitorId());
       const totalErrors = monitor.getTotalErrorsPerStream();
 
@@ -314,10 +311,12 @@ export class DASHMonitorService {
     });
 
     lines.push('');
-    lines.push('# HELP dash_monitor_stream_time_since_last_error_seconds Time since last error in seconds');
+    lines.push(
+      '# HELP dash_monitor_stream_time_since_last_error_seconds Time since last error in seconds'
+    );
     lines.push('# TYPE dash_monitor_stream_time_since_last_error_seconds gauge');
 
-    this.monitors.forEach(monitor => {
+    this.monitors.forEach((monitor) => {
       const monitorId = escapeLabel(monitor.getMonitorId());
       const lastErrorTimes = monitor.getLastErrorTimePerStream();
 
@@ -333,7 +332,7 @@ export class DASHMonitorService {
     lines.push('# HELP dash_monitor_manifest_fetch_errors Manifest fetch errors by status code');
     lines.push('# TYPE dash_monitor_manifest_fetch_errors counter');
 
-    this.monitors.forEach(monitor => {
+    this.monitors.forEach((monitor) => {
       const monitorId = escapeLabel(monitor.getMonitorId());
       const fetchErrors = monitor.getManifestFetchErrors();
 
@@ -348,13 +347,11 @@ export class DASHMonitorService {
     lines.push('# HELP dash_monitor_error_count Current number of errors in memory');
     lines.push('# TYPE dash_monitor_error_count gauge');
 
-    this.monitors.forEach(monitor => {
+    this.monitors.forEach((monitor) => {
       const monitorId = escapeLabel(monitor.getMonitorId());
       const errorCount = monitor.getErrors().length;
 
-      lines.push(
-        `dash_monitor_error_count{monitor_id="${monitorId}"} ${errorCount}`
-      );
+      lines.push(`dash_monitor_error_count{monitor_id="${monitorId}"} ${errorCount}`);
     });
 
     lines.push('');
@@ -392,7 +389,7 @@ export class DASHMonitorService {
    * Stop the service
    */
   async stop(): Promise<void> {
-    this.monitors.forEach(monitor => monitor.stop());
+    this.monitors.forEach((monitor) => monitor.stop());
     await this.server.close();
   }
 }
