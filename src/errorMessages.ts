@@ -96,6 +96,15 @@ export const ErrorMessages = {
   RESOLUTION_INVALID: (width: number, height: number, reason: string) =>
     `Invalid resolution ${width}x${height}: ${reason}`,
 
+  // Period transition errors
+  PERIOD_TRANSITION_GAP: (periodIndex: number, gapDuration: number) =>
+    `Gap detected at period ${periodIndex} transition: ${gapDuration.toFixed(3)}s`,
+  PERIOD_TRANSITION_OVERLAP: (periodIndex: number, overlapDuration: number) =>
+    `Overlap detected at period ${periodIndex} transition: ${overlapDuration.toFixed(3)}s`,
+  PERIOD_MISSING_START_TIME: (periodIndex: number) =>
+    `Period ${periodIndex} missing start time attribute`,
+  PERIOD_MISSING_DURATION: (periodIndex: number) => `Period ${periodIndex} missing duration`,
+
   // General validation errors
   VALIDATION_FAILED: (reason: string) => `Validation failed: ${reason}`,
   CONFIGURATION_INVALID: (param: string, reason: string) =>

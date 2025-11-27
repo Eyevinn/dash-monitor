@@ -68,7 +68,7 @@ export interface Playlist {
       width: number;
       height: number;
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
   endList?: boolean;
   uri?: string;
@@ -77,10 +77,16 @@ export interface Playlist {
   targetDuration?: number;
   discontinuitySequence?: number;
   discontinuityStarts?: number[];
-  timelineStarts?: any[];
+  timelineStarts?: TimelineStart[];
   mediaSequence?: number;
   segments?: Segment[];
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+export interface TimelineStart {
+  start?: number;
+  end?: number;
+  [key: string]: unknown;
 }
 
 export interface Segment {
@@ -96,7 +102,7 @@ export interface Segment {
   presentationTime?: number;
   dateTimeObject?: Date;
   dateTimeString?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface MediaGroups {
@@ -135,6 +141,7 @@ export enum ErrorType {
   STALE_MANIFEST = 'STALE_MANIFEST',
   PUBLISH_TIME_ERROR = 'PUBLISH_TIME_ERROR',
   SEGMENT_AVAILABILITY_ERROR = 'SEGMENT_AVAILABILITY_ERROR',
+  PERIOD_TRANSITION_ERROR = 'PERIOD_TRANSITION_ERROR',
 }
 
 export interface StreamInput {
@@ -185,6 +192,8 @@ export interface MonitorOptions {
   monitorInterval?: number; // Milliseconds between checks (default: 3000)
   errorLimit?: number; // Maximum errors to store per stream (default: 10)
   logConsole?: boolean; // Enable console logging (default: true)
+  enableSegmentAvailabilityCheck?: boolean; // Enable segment availability validation (default: false)
+  segmentCheckSampleSize?: number; // Number of segments to check for availability (default: 3)
 }
 
 export interface MonitorInfo {
@@ -195,51 +204,13 @@ export interface MonitorInfo {
 }
 
 export interface ParsedMPD {
-  // Core properties from mpd-parser output
-  allowCache?: boolean;
-  endList?: boolean;
-  mediaSequence?: number;
-  discontinuitySequence?: number;
-  playlistType?: string;
-  targetDuration?: number;
-  totalDuration?: number; // This is the duration of the content
-  duration?: number; // Alias for totalDuration
-
   // Playlists (equivalent to MPD periods/representations)
   playlists?: any[];
 
-  // Media groups (audio, video, subtitles, etc.)
-  mediaGroups?: {
-    AUDIO?: any;
-    VIDEO?: any;
-    'CLOSED-CAPTIONS'?: any;
-    SUBTITLES?: any;
-  };
-
-  // Segments
-  segments?: any[];
-  discontinuityStarts?: number[];
-
-  // Date/time info
-  dateTimeString?: string;
-  dateTimeObject?: Date;
-
-  // Content steering
-  contentSteering?: {
-    defaultServiceLocation?: string;
-    proxyServerURL?: string;
-    queryBeforeStart?: boolean;
-    serverURL?: string;
-  };
-
-  // Legacy MPD properties (for compatibility)
-  type?: string; // 'static' or 'dynamic' - we'll infer this
+  // MPD properties used for validation
+  type?: string; // 'static' or 'dynamic'
   mediaPresentationDuration?: number;
-  minimumUpdatePeriod?: number;
   publishTime?: number;
-  availabilityStartTime?: number;
-  timeShiftBufferDepth?: number;
-  suggestedPresentationDelay?: number;
   periods?: any[];
 
   [key: string]: any;

@@ -15,6 +15,7 @@ A TypeScript/Node.js service to monitor DASH/MPEG-DASH live streams for errors a
 
 The monitor performs comprehensive validation:
 
+### Core Validations
 - ✅ **Manifest Availability** - HTTP fetch success with proper error codes
 - ✅ **XML Parsing** - Valid MPD XML structure
 - ✅ **MPD Structure** - Required attributes and proper schema
@@ -24,6 +25,12 @@ The monitor performs comprehensive validation:
 - ✅ **Segment Timeline** - Timeline gaps, overlaps, and duration validation
 - ✅ **Codec & Bitrate** - Validates codec formats and bitrate ranges
 - ✅ **Resolution & Aspect Ratio** - Quality metadata validation
+
+### Enhanced DASH Features 🆕
+- ⏱️ **Time Shift Buffer** - Ensures proper DVR window configuration
+- 🎯 **Presentation Delay** - Validates suggested presentation delay settings
+- 🔄 **Multi-Period Transitions** - Detects gaps and overlaps at period boundaries
+- 📡 **Segment Availability** - Optional HTTP checks for actual segment availability
 
 ## Installation
 
@@ -199,12 +206,19 @@ dash_monitor_error_count{monitor_id}
 
 ### Monitor Options
 
+#### Core Options
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `staleLimit` | number | 6000 | Milliseconds before manifest considered stale |
 | `monitorInterval` | number | 3000 | Milliseconds between checks |
 | `errorLimit` | number | 10 | Maximum errors to store (FIFO) |
 | `logConsole` | boolean | true | Enable console logging |
+
+#### Enhanced DASH Options 🆕
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enableSegmentAvailabilityCheck` | boolean | false | Enable HTTP segment availability checks (use cautiously) |
+| `segmentCheckSampleSize` | number | 3 | Number of segments to check when availability checking is enabled |
 
 ### Environment Variables
 
@@ -263,6 +277,7 @@ Similar to the HLS monitor setup, you can create a manager service that reads fr
 
 ## Error Types
 
+### Core Error Types
 | Error Type | Description |
 |------------|-------------|
 | `MANIFEST_FETCH_ERROR` | Failed to fetch MPD manifest |
@@ -274,55 +289,10 @@ Similar to the HLS monitor setup, you can create a manager service that reads fr
 | `SEGMENT_TIMELINE_ERROR` | Segment timeline inconsistencies |
 | `SEGMENT_AVAILABILITY_ERROR` | Segments not available |
 
-## Programmatic Usage
-
-### Monitor Single Stream
-
-```javascript
-const { DASHMonitor } = require('@eyevinn/dash-monitor');
-
-const monitor = new DASHMonitor(['https://example.com/stream.mpd']);
-await monitor.start();
-```
-
-### Monitor Multiple Streams
-
-```javascript
-const monitor = new DASHMonitor([
-  { url: 'https://example.com/stream1.mpd', id: 'stream-1' },
-  { url: 'https://example.com/stream2.mpd', id: 'stream-2' }
-]);
-
-await monitor.start();
-```
-
-### Add/Remove Streams Dynamically
-
-```javascript
-// Add streams
-await monitor.update([
-  'https://example.com/stream3.mpd'
-]);
-
-// Remove stream
-await monitor.removeStream('stream-1');
-```
-
-### Access Errors
-
-```javascript
-// Get all errors
-const errors = monitor.getErrors();
-
-// Get fetch errors
-const fetchErrors = monitor.getManifestFetchErrors();
-
-// Get error counts per stream
-const totalErrors = monitor.getTotalErrorsPerStream();
-
-// Clear errors
-monitor.clearErrors();
-```
+### Enhanced Error Types 🆕
+| Error Type | Description |
+|------------|-------------|
+| `PERIOD_TRANSITION_ERROR` | Gaps or overlaps detected at period transitions |
 
 ## Development
 

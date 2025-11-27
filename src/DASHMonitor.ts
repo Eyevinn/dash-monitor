@@ -24,6 +24,11 @@ import {
 } from './types';
 
 export class DASHMonitor {
+  // Constants
+  private static readonly MAX_STREAM_ID_LENGTH = 50;
+  private static readonly PERIOD_TRANSITION_TOLERANCE = 0.001; // 1ms tolerance
+  private static readonly SEGMENT_UNAVAILABLE_THRESHOLD = 50; // 50% threshold
+
   private monitorId: string;
   private state: State = State.IDLE;
   private streams: StreamItem[] = [];
@@ -51,6 +56,8 @@ export class DASHMonitor {
       monitorInterval: options.monitorInterval ?? 3000,
       errorLimit: options.errorLimit ?? 10,
       logConsole: options.logConsole ?? true,
+      enableSegmentAvailabilityCheck: options.enableSegmentAvailabilityCheck ?? false,
+      segmentCheckSampleSize: options.segmentCheckSampleSize ?? 3,
     };
 
     this.errorsList = new ErrorsList(this.options.errorLimit);
@@ -64,27 +71,42 @@ export class DASHMonitor {
    * Normalize stream inputs to StreamItem[]
    */
   private normalizeStreams(inputs: (string | StreamInput)[]): StreamItem[] {
-    const streamMap = new Map<string, string>();
+    const usedIds = new Set<string>();
+    const streamItems: StreamItem[] = [];
 
     inputs.forEach((input) => {
       const url = typeof input === 'string' ? input : input.url;
-      let id =
+      const baseId =
         typeof input === 'string'
           ? this.normalizeStreamId(url)
           : input.id || this.normalizeStreamId(url);
 
-      // Handle duplicate IDs
-      let finalId = id;
-      let counter = 1;
-      while (Array.from(streamMap.values()).includes(finalId)) {
-        finalId = `${id}_${counter}`;
-        counter++;
-      }
+      // Ensure unique ID
+      const finalId = this.ensureUniqueId(baseId, usedIds);
+      usedIds.add(finalId);
 
-      streamMap.set(url, finalId);
+      streamItems.push({ url, id: finalId });
     });
 
-    return Array.from(streamMap.entries()).map(([url, id]) => ({ url, id }));
+    return streamItems;
+  }
+
+  /**
+   * Ensure ID is unique by adding counter suffix if needed
+   * @param baseId The base ID to make unique
+   * @param usedIds Set of already used IDs
+   * @returns Unique ID
+   */
+  private ensureUniqueId(baseId: string, usedIds: Set<string>): string {
+    let finalId = baseId;
+    let counter = 1;
+
+    while (usedIds.has(finalId)) {
+      finalId = `${baseId}_${counter}`;
+      counter++;
+    }
+
+    return finalId;
   }
 
   /**
@@ -94,7 +116,7 @@ export class DASHMonitor {
     return url
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '_')
-      .substring(0, 50);
+      .substring(0, DASHMonitor.MAX_STREAM_ID_LENGTH);
   }
 
   /**
@@ -173,8 +195,18 @@ export class DASHMonitor {
         this.manifestFetchErrors.delete(stream.url);
       }
 
-      // Validate MPD
+      // Validate MPD (synchronous validations)
       const errors = this.validateMPD(mpd, stream);
+
+      // Validate segment availability (async - optional)
+      if (this.options.enableSegmentAvailabilityCheck) {
+        const segmentErrors = await this.validateSegmentAvailability(
+          mpd,
+          stream,
+          this.options.segmentCheckSampleSize
+        );
+        errors.push(...segmentErrors);
+      }
 
       // Store errors
       errors.forEach((error) => {
@@ -184,7 +216,7 @@ export class DASHMonitor {
       // Update stream data
       streamData.lastMPD = mpd;
       streamData.lastChecked = Date.now();
-    } catch (error) {
+    } catch (error: unknown) {
       this.handleFetchError(error, stream);
     }
   }
@@ -293,7 +325,7 @@ export class DASHMonitor {
   }
 
   /**
-   * Validate periods
+   * Validate periods and period transitions
    */
   private validatePeriods(mpd: ParsedMPD, stream: StreamItem): MonitorError[] {
     const errors: MonitorError[] = [];
@@ -302,23 +334,152 @@ export class DASHMonitor {
       return errors;
     }
 
-    // Check period continuity
-    for (let i = 1; i < mpd.periods.length; i++) {
-      const prevPeriod = mpd.periods[i - 1];
-      const currPeriod = mpd.periods[i];
+    // Check period continuity and transitions
+    for (let i = 0; i < mpd.periods.length; i++) {
+      const period = mpd.periods[i];
 
-      if (prevPeriod.start !== undefined && currPeriod.start !== undefined) {
-        if (currPeriod.start < prevPeriod.start) {
-          errors.push(
-            this.createError(
-              ErrorType.PERIOD_CONTINUITY_ERROR,
-              ErrorMessages.PERIOD_START_BACKWARDS(i, i - 1, currPeriod.start, prevPeriod.start),
-              stream,
-              MediaType.MASTER
-            )
-          );
+      // Validate period start time for multi-period streams
+      errors.push(...this.validatePeriodStartTime(mpd, period, i, stream));
+
+      // Validate period transitions
+      if (i > 0) {
+        errors.push(...this.validatePeriodTransition(mpd.periods[i - 1], period, i, stream));
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * Validate period start time requirement
+   * @param mpd The parsed MPD manifest
+   * @param period The period to validate
+   * @param index The period index
+   * @param stream The stream being checked
+   * @returns Array of validation errors
+   */
+  private validatePeriodStartTime(
+    mpd: ParsedMPD,
+    period: any,
+    index: number,
+    stream: StreamItem
+  ): MonitorError[] {
+    const errors: MonitorError[] = [];
+
+    if (mpd.periods && mpd.periods.length > 1 && period.start === undefined) {
+      errors.push(
+        this.createError(
+          ErrorType.PERIOD_TRANSITION_ERROR,
+          ErrorMessages.PERIOD_MISSING_START_TIME(index),
+          stream,
+          MediaType.MASTER
+        )
+      );
+    }
+
+    return errors;
+  }
+
+  /**
+   * Validate transition between two periods
+   * @param prevPeriod The previous period
+   * @param currPeriod The current period
+   * @param index The current period index
+   * @param stream The stream being checked
+   * @returns Array of validation errors
+   */
+  private validatePeriodTransition(
+    prevPeriod: any,
+    currPeriod: any,
+    index: number,
+    stream: StreamItem
+  ): MonitorError[] {
+    const errors: MonitorError[] = [];
+
+    // Check for backwards time
+    if (prevPeriod.start !== undefined && currPeriod.start !== undefined) {
+      if (currPeriod.start < prevPeriod.start) {
+        errors.push(
+          this.createError(
+            ErrorType.PERIOD_CONTINUITY_ERROR,
+            ErrorMessages.PERIOD_START_BACKWARDS(
+              index,
+              index - 1,
+              currPeriod.start,
+              prevPeriod.start
+            ),
+            stream,
+            MediaType.MASTER
+          )
+        );
+        return errors; // Skip further checks for this period
+      }
+
+      // Check for gaps or overlaps at period boundary
+      const prevPeriodEnd = this.calculatePeriodEndTime(prevPeriod);
+      if (prevPeriodEnd !== undefined) {
+        errors.push(...this.validatePeriodBoundary(prevPeriodEnd, currPeriod.start, index, stream));
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * Calculate the end time of a period
+   */
+  private calculatePeriodEndTime(period: any): number | undefined {
+    if (period.duration !== undefined) {
+      return period.start + period.duration;
+    }
+
+    // Try to calculate from segments
+    if (period.playlists && period.playlists.length > 0) {
+      const playlist = period.playlists[0];
+      if (playlist.segments && playlist.segments.length > 0) {
+        const segments = playlist.segments;
+        const lastSegment = segments[segments.length - 1];
+        if (lastSegment.presentationTime !== undefined && lastSegment.duration !== undefined) {
+          return lastSegment.presentationTime + lastSegment.duration;
         }
       }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Validate period boundary for gaps or overlaps
+   */
+  private validatePeriodBoundary(
+    prevPeriodEnd: number,
+    currPeriodStart: number,
+    index: number,
+    stream: StreamItem
+  ): MonitorError[] {
+    const errors: MonitorError[] = [];
+    const transition = currPeriodStart - prevPeriodEnd;
+
+    if (transition > DASHMonitor.PERIOD_TRANSITION_TOLERANCE) {
+      // Gap detected
+      errors.push(
+        this.createError(
+          ErrorType.PERIOD_TRANSITION_ERROR,
+          ErrorMessages.PERIOD_TRANSITION_GAP(index, transition),
+          stream,
+          MediaType.MASTER
+        )
+      );
+    } else if (transition < -DASHMonitor.PERIOD_TRANSITION_TOLERANCE) {
+      // Overlap detected
+      errors.push(
+        this.createError(
+          ErrorType.PERIOD_TRANSITION_ERROR,
+          ErrorMessages.PERIOD_TRANSITION_OVERLAP(index, Math.abs(transition)),
+          stream,
+          MediaType.MASTER
+        )
+      );
     }
 
     return errors;
@@ -356,34 +517,78 @@ export class DASHMonitor {
   /**
    * Validate segment timeline consistency
    * Checks for gaps, overlaps, and discontinuities in segment timeline
+   *
+   * IMPORTANT: Segment timing is relative to the start of its parent Period.
+   * Timing effectively resets at each new period boundary, so validation
+   * must be done per-period, not across the entire manifest.
    */
   private validateSegmentTimeline(mpd: ParsedMPD, stream: StreamItem): MonitorError[] {
     const errors: MonitorError[] = [];
 
-    // Only validate if we have playlists with segments
-    if (!mpd.playlists || mpd.playlists.length === 0) {
+    // Check if we have periods with playlists
+    if (!mpd.periods || mpd.periods.length === 0) {
+      // Fallback: check root-level playlists (for single-period streams)
+      if (!mpd.playlists || mpd.playlists.length === 0) {
+        return errors;
+      }
+      // Validate root-level playlists as a single implicit period
+      errors.push(...this.validateSegmentTimelineForPeriod(mpd.playlists, 0, stream));
       return errors;
     }
 
-    // Check each playlist (representation)
-    for (const playlist of mpd.playlists) {
-      if (!playlist.segments || playlist.segments.length === 0) {
+    // Validate segments for each period separately
+    for (let periodIndex = 0; periodIndex < mpd.periods.length; periodIndex++) {
+      const period: any = mpd.periods[periodIndex];
+
+      if (!period?.playlists || !Array.isArray(period.playlists)) {
         continue;
       }
 
-      const segments = playlist.segments;
-      let expectedTime = 0;
-      let baseTime: number | undefined = undefined;
+      // Validate segments within this period
+      errors.push(...this.validateSegmentTimelineForPeriod(period.playlists, periodIndex, stream));
+    }
 
-      for (let i = 0; i < segments.length; i++) {
-        const segment = segments[i];
+    return errors;
+  }
+
+  /**
+   * Validate segment timeline for playlists within a single period
+   * Segment presentation times are relative to the period start and reset at period boundaries
+   */
+  private validateSegmentTimelineForPeriod(
+    playlists: any[],
+    _periodIndex: number,
+    stream: StreamItem
+  ): MonitorError[] {
+    const errors: MonitorError[] = [];
+
+    // Check each playlist (representation) within this period
+    for (let playlistIndex = 0; playlistIndex < playlists.length; playlistIndex++) {
+      const playlist = playlists[playlistIndex];
+
+      if (!playlist?.segments || !Array.isArray(playlist.segments)) {
+        continue;
+      }
+
+      const segments: any[] = playlist.segments;
+
+      // Only validate if we have at least 2 segments
+      if (segments.length < 2) {
+        continue;
+      }
+
+      for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+        const segment = segments[segmentIndex];
+
+        const duration = segment?.duration as number | undefined;
+        const presentationTime = segment?.presentationTime as number | undefined;
 
         // Check for missing duration
-        if (segment.duration === undefined || segment.duration === null) {
+        if (duration === undefined || duration === null || typeof duration !== 'number') {
           errors.push(
             this.createError(
               ErrorType.SEGMENT_TIMELINE_ERROR,
-              ErrorMessages.SEGMENT_MISSING_DURATION(i),
+              ErrorMessages.SEGMENT_MISSING_DURATION(segmentIndex),
               stream,
               MediaType.VIDEO
             )
@@ -391,54 +596,40 @@ export class DASHMonitor {
           continue;
         }
 
-        // Check for timeline consistency (if presentationTime is available)
-        if (segment.presentationTime !== undefined) {
-          // Set base time from first segment
-          if (baseTime === undefined) {
-            baseTime = segment.presentationTime;
-            expectedTime = 0;
-          } else if (i > 0) {
-            const tolerance = 0.1; // 100ms tolerance for floating point comparison
-            const relativeTime = segment.presentationTime - baseTime;
-            const gap = relativeTime - expectedTime;
+        // Check for timeline consistency between consecutive segments in this manifest
+        // Only validate if both current and next segment have presentation times
+        if (
+          segmentIndex < segments.length - 1 &&
+          presentationTime !== undefined &&
+          typeof presentationTime === 'number'
+        ) {
+          const nextSegment = segments[segmentIndex + 1];
+          const nextPresentationTime = nextSegment?.presentationTime as number | undefined;
 
-            if (Math.abs(gap) > tolerance) {
-              if (gap > tolerance) {
-                // Gap detected
-                errors.push(
-                  this.createError(
-                    ErrorType.SEGMENT_TIMELINE_ERROR,
-                    ErrorMessages.SEGMENT_TIMELINE_GAP(
-                      i,
-                      expectedTime,
-                      relativeTime,
-                      gap
-                    ),
-                    stream,
-                    MediaType.VIDEO
-                  )
-                );
-              } else if (gap < -tolerance) {
-                // Overlap detected
-                errors.push(
-                  this.createError(
-                    ErrorType.SEGMENT_TIMELINE_ERROR,
-                    ErrorMessages.SEGMENT_TIMELINE_OVERLAP(
-                      i,
-                      expectedTime,
-                      relativeTime,
-                      Math.abs(gap)
-                    ),
-                    stream,
-                    MediaType.VIDEO
-                  )
-                );
-              }
+          if (nextPresentationTime !== undefined && typeof nextPresentationTime === 'number') {
+            const currentSegmentEndTime = presentationTime + duration;
+            const tolerance = 0.1; // 100ms tolerance for floating point comparison
+            const gap = nextPresentationTime - currentSegmentEndTime;
+
+            // Only check for gaps, not overlaps
+            if (gap > tolerance) {
+              // Gap detected: next segment starts after current segment ended
+              errors.push(
+                this.createError(
+                  ErrorType.SEGMENT_TIMELINE_ERROR,
+                  ErrorMessages.SEGMENT_TIMELINE_GAP(
+                    segmentIndex + 1,
+                    currentSegmentEndTime,
+                    nextPresentationTime,
+                    gap
+                  ),
+                  stream,
+                  MediaType.VIDEO
+                )
+              );
             }
           }
         }
-
-        expectedTime += segment.duration;
       }
     }
 
@@ -640,7 +831,7 @@ export class DASHMonitor {
     // If too many segments are unavailable, add summary error
     if (unavailableCount > 0) {
       const percentage = (unavailableCount / segmentsToCheck.length) * 100;
-      if (percentage > 50) {
+      if (percentage > DASHMonitor.SEGMENT_UNAVAILABLE_THRESHOLD) {
         errors.push(
           this.createError(
             ErrorType.SEGMENT_AVAILABILITY_ERROR,
@@ -687,7 +878,7 @@ export class DASHMonitor {
     } else {
       // Unknown error - treat as fetch error
       errorType = ErrorType.MANIFEST_FETCH_ERROR;
-      description = error?.message || 'Unknown error';
+      description = error instanceof Error ? error.message : 'Unknown error';
       statusCode = this.extractStatusCode(error);
 
       this.manifestFetchErrors.set(stream.url, {
@@ -710,11 +901,14 @@ export class DASHMonitor {
   /**
    * Extract HTTP status code from error
    */
-  private extractStatusCode(error: any): number {
-    if (error.message && error.message.includes('HTTP')) {
-      const match = error.message.match(/HTTP (\d+)/);
-      if (match) {
-        return parseInt(match[1], 10);
+  private extractStatusCode(error: unknown): number {
+    if (error && typeof error === 'object' && 'message' in error) {
+      const errorMessage = String((error as Error).message);
+      if (errorMessage.includes('HTTP')) {
+        const match = errorMessage.match(/HTTP (\d+)/);
+        if (match && match[1]) {
+          return parseInt(match[1], 10);
+        }
       }
     }
     return 0;

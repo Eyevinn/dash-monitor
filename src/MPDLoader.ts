@@ -100,24 +100,9 @@ export class MPDLoader {
 
     // The parser returns an HLS-like structure
     const mpd: ParsedMPD = {
-      // Direct properties from parser
-      allowCache: parsed.allowCache,
-      endList: parsed.endList,
-      mediaSequence: parsed.mediaSequence,
-      discontinuitySequence: parsed.discontinuitySequence,
-      playlistType: parsed.playlistType,
-      targetDuration: parsed.targetDuration,
-      totalDuration: parsed.totalDuration,
-      duration: parsed.duration,
+      // Playlists (representations/variants)
       playlists: parsed.playlists || [],
-      mediaGroups: parsed.mediaGroups,
-      segments: parsed.segments,
-      discontinuityStarts: parsed.discontinuityStarts,
-      dateTimeString: parsed.dateTimeString,
-      dateTimeObject: parsed.dateTimeObject,
-      contentSteering: parsed.contentSteering,
 
-      // Map to legacy MPD properties for compatibility with existing validation logic
       // Type inferred from playlist.endList: truthy = static (VOD), falsy = dynamic (live)
       type: streamType,
 
@@ -141,7 +126,8 @@ export class MPDLoader {
           : [],
     };
 
-    // Include any additional properties
+    // Include any additional properties from the parser (like publishTime)
+    // This allows the parser to pass through properties we may need
     Object.keys(parsed).forEach((key) => {
       if (!(key in mpd)) {
         mpd[key] = parsed[key];
