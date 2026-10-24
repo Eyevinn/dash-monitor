@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js >= 24.22.1
+- Node.js ^22.23.4 or >= 24.22.1
 - npm
 
 ## Installation
