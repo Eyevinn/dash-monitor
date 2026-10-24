@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js >= 18.0.0
+- Node.js >= 24.22.1
 - npm
 
 ## Installation
